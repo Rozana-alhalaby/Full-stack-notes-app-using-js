@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MyNotebook - A Simple Notes App</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN"
+      crossorigin="anonymous"
+    />
+  </head>
+  <body>
+    <nav class="navbar navbar-dark navbar-expand-lg bg-dark">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="/">MyNotebook</a>
+        <button
+          class="navbar-toggler"
+          type="button"
+          data-bs-toggle="collapse"
+          data-bs-target="#navbarSupportedContent"
+          aria-controls="navbarSupportedContent"
+          aria-expanded="false"
+          aria-label="Toggle navigation"
+        >
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarSupportedContent">
+          <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+            <li class="nav-item">
+              <a class="nav-link active" aria-current="page" href="/">Home</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="/about">About</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="/login">Login</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="/signup">Signup</a>
+            </li>
+          </ul>
+          <div class="d-flex" role="search"></div>
+        </div>
+      </div>
+    </nav>
+
+    <div id="error-container" class="alert alert-danger" style="display: none"></div>
+
+    <div class="container">
+      <h1 class="my-4">Add a Note</h1>
+      <div>
+        <div class="mb-3">
+          <label for="title" class="form-label">Title</label>
+          <input type="text" class="form-control" id="title" />
+        </div>
+        <div class="mb-3">
+          <label for="desc" class="form-label">Description</label>
+          <textarea class="form-control" id="desc"></textarea>
+        </div>
+
+        <button id="submit" type="button" class="btn btn-primary">Submit</button>
+      </div>
+    </div>
+
+    <h1 class="my-4">Your Notes!</h1>
+    <div class="row mynotes"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL"
+        crossorigin="anonymous"></script>
+
+    <script>
+        async function postData(url = "", data = {}) {
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    credentials: 'include', // Include credentials for session handling
+                    body: JSON.stringify(data),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+
+                const rdata = await response.json();
+                return rdata;
+            } catch (error) {
+                console.error("Error during POST request:", error);
+                throw error;
+            }
+        }
+
+        const fetchNotes = async () => {
+    try {
+        const response = await postData("/getnote", {});
+
+        if (response.success) {
+            const noteContainer = document.querySelector(".mynotes");
+            noteContainer.innerHTML = "";
+
+            response.notes.forEach((element) => {
+                console.log("Element:", element);
+
+                if (element && element.title) {
+                    let note = `<div class="card" style="width: 18rem; padding-left: 20px;">
+                        <div class="card-body">
+                            <h5 class="card-title">${element.title}</h5>
+                            <h6 class="card-subtitle mb-2 text-body-secondary"> Note description</h6>
+                            <p class="card-text">${element.desc}</p>
+                            <button class="btn btn-danger delete-note" data-note-id="${element.id}">Delete</button>
+                            <button class="btn btn-info edit-note" data-note-id="${element.id}">Edit</button>
+                        </div>
+                    </div>`;
+                    noteContainer.innerHTML += note;
+                } else {
+                    console.log("Skipping invalid element:", element);
+                }
+            });
+        } else {
+            alert("Please log in First!");
+        }
+    } catch (error) {
+        console.error("Error fetching notes:", error);
+    }
+};
+
+
+        document.getElementById("submit").addEventListener("click", async () => {
+            try {
+                const title = document.getElementById("title").value;
+                const desc = document.getElementById("desc").value;
+                const email = JSON.parse(localStorage.getItem("user"))?.email;
+                
+                const response = await postData("/addnote", { title, desc, email });
+                
+                if (response.success) {
+                    alert("Note Created!");
+                    document.getElementById("title").value = "";
+                    document.getElementById("desc").value = "";
+                    fetchNotes();
+                }
+            } catch (error) {
+                console.error("Error adding note:", error);
+            }
+        });
+
+        document.addEventListener("click", async (event) => {
+            if (event.target.classList.contains("delete-note")) {
+          const noteId = event.target.dataset.noteId;
+          const deleteResponse = await postData("/deletenote", { noteId });
+
+          if (deleteResponse.success) {
+            alert("Note deleted!");
+            fetchNotes();
+          } else {
+            alert("Failed to delete note!");
+          }
+        
+        } else if (event.target.classList.contains("edit-note")) {
+        console.log("Edit note button clicked");
+        const noteId = event.target.dataset.noteId;
+        const note = await fetchNoteById(noteId);
+
+        if (note && note.success) {
+            console.log("Fetched note for editing:", note.note);
+            populateFormFields(note.note || {}); // Pass an empty object if note is undefined
+            setupUpdateNoteListener(noteId);
+        } else {
+            alert("Failed to fetch note for editing!");
+        }
+    }
+});
+
+async function fetchNoteById(noteId) {
+    try {
+        const response = await fetch("/getnote", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            credentials: 'include',  // Include credentials for session handling
+            body: JSON.stringify({ noteId }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+
+        const responseData = await response.json();
+
+        if (responseData.success) {
+            return { success: true, note: responseData.note || {} };
+        } else {
+            console.error("Error fetching note:", responseData.error);
+            return { success: false, error: responseData.error || "Failed to fetch note" };
+        }
+    } catch (error) {
+        console.error("Error fetching note by ID:", error);
+        return { success: false, error: "Failed to fetch note" };
+    }
+}
+
+
+function populateFormFields(note) {
+    document.getElementById("title").value = note.title || "";
+    document.getElementById("desc").value = note.desc || "";
+}
+
+function setupUpdateNoteListener(noteId) {
+    document.getElementById("submit").addEventListener("click", async () => {
+        try {
+            const updatedTitle = document.getElementById("title").value;
+            const updatedDesc = document.getElementById("desc").value;
+
+            const updateResponse = await postData("/updatenote", { noteId, updatedTitle, updatedDesc });
+
+            if (updateResponse.success) {
+                alert("Note Updated!");
+                document.getElementById("title").value = "";
+                document.getElementById("desc").value = "";
+                fetchNotes(); // Fetch and display updated notes
+            }
+        } catch (error) {
+            console.error("Error updating note:", error);
+        }
+    });
+}
+
+    </script>
+</body>
+</html>
